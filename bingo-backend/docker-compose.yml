@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: bingo-postgres
+    environment:
+      POSTGRES_DB: bingo_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - bingo-network
+    restart: unless-stopped
+
+  # Backend API Service
+  backend:
+    build: .
+    container_name: bingo-bingo-backend
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: bingo_db
+      DB_USER: bingo_user
+      DB_PASSWORD: bingo_password
+      PORT: 3001
+      NODE_ENV: production
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+    networks:
+      - bingo-network
+    restart: unless-stopped
+    command: sh -c "sleep 10 && npm run migrate && npm start"
+
+volumes:
+  postgres_data:
+
+networks:
+  bingo-network:
+    driver: bridge
