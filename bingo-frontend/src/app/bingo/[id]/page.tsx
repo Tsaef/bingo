@@ -304,7 +304,7 @@ export default function BingoPage() {
                 className="w-full"
                 variant="outline"
               >
-                Retour à l'accueil
+                {"Retour à l'accueil"}
               </Button>
             </Link>
           </CardFooter>
