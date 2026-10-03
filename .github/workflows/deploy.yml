@@ -1,0 +1,49 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  # Les memes images que sur le VPS : si elles ne se construisent pas ici,
+  # aucune validation n'est demandee.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build bingo-backend
+      - run: docker build --build-arg NEXT_PUBLIC_API_BASE_URL=https://bingo.tsaef.fr bingo-frontend
+
+  # L'environnement "production" exige une validation manuelle avant ce job.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://bingo.tsaef.fr
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure SSH
+        env:
+          SSH_KEY_API: ${{ secrets.SSH_KEY_API }}
+          SSH_KEY_FRONT: ${{ secrets.SSH_KEY_FRONT }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY_API" > ~/.ssh/api
+          printf '%s\n' "$SSH_KEY_FRONT" > ~/.ssh/front
+          chmod 600 ~/.ssh/api ~/.ssh/front
+          echo "tsaef.fr ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFV9a+JbrZi6tKjXobVABebJe9qyNymiQZArX/mRGOmU" > ~/.ssh/known_hosts
+      # Une cle par dossier, bridee cote serveur (deploy-gate.sh) : rsync dans
+      # ~/stack/apps/bingo-<x> et reconstruction du seul service associe.
+      # L'API d'abord : le nouveau front ne parle jamais a l'ancienne API.
+      - name: API
+        run: |
+          rsync -az --delete -e "ssh -i $HOME/.ssh/api" bingo-backend/ "ubuntu@tsaef.fr:"
+          ssh -i ~/.ssh/api ubuntu@tsaef.fr rebuild
+      - name: Front
+        run: |
+          rsync -az --delete -e "ssh -i $HOME/.ssh/front" bingo-frontend/ "ubuntu@tsaef.fr:"
+          ssh -i ~/.ssh/front ubuntu@tsaef.fr rebuild
